@@ -6,6 +6,7 @@ import { analyzeTransactionFromVoice } from '../services/geminiService';
 import Spinner from './Spinner';
 
 interface ManualEntryProps {
+  initialData?: Partial<ReceiptData>;
   onClose: () => void;
   onSave: (data: ReceiptData) => void;
 }
@@ -15,11 +16,22 @@ const categories = [
     "Entertainment", "Health & Wellness", "Travel", "Other"
 ];
 
-const ManualEntry: React.FC<ManualEntryProps> = ({ onClose, onSave }) => {
+const ManualEntry: React.FC<ManualEntryProps> = ({ initialData, onClose, onSave }) => {
+  // State for manual entry
   const [transactionName, setTransactionName] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState(categories[2]); // Default to Transportation
+  const [clientOrProspect, setClientOrProspect] = useState('');
+  const [purpose, setPurpose] = useState('');
+
+  // State for mileage entry
+  const [startLocation, setStartLocation] = useState('');
+  const [endLocation, setEndLocation] = useState('');
+  const [distance, setDistance] = useState('');
+  const [rate, setRate] = useState('10'); // Default rate
+
+  // State for voice recording
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,11 +39,24 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ onClose, onSave }) => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
+  useEffect(() => {
+    if (initialData) {
+        setTransactionName(initialData.transaction_name || '');
+        setTotalAmount(initialData.total_amount?.toString() || '');
+        setTransactionDate(initialData.transaction_date || new Date().toISOString().slice(0, 10));
+        setCategory(initialData.category || categories[2]);
+        setClientOrProspect(initialData.client_or_prospect || '');
+        setPurpose(initialData.purpose || '');
+    }
+  }, [initialData]);
+
   const handleVoiceData = (data: ReceiptData) => {
     if (data.transaction_name) setTransactionName(data.transaction_name);
     if (data.total_amount) setTotalAmount(data.total_amount.toString());
     if (data.transaction_date) setTransactionDate(data.transaction_date);
     if (data.category) setCategory(data.category);
+    if (data.client_or_prospect) setClientOrProspect(data.client_or_prospect);
+    if (data.purpose) setPurpose(data.purpose);
   };
 
   const startRecording = async () => {
@@ -84,6 +109,25 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ onClose, onSave }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Mileage logging logic first
+    const distanceNum = parseFloat(distance);
+    const rateNum = parseFloat(rate);
+
+    if (startLocation && endLocation && !isNaN(distanceNum) && distanceNum > 0 && !isNaN(rateNum)) {
+      const calculatedAmount = distanceNum * rateNum;
+      onSave({
+        transaction_name: `Mileage: ${startLocation} to ${endLocation}`,
+        total_amount: calculatedAmount,
+        transaction_date: transactionDate,
+        category: 'Transportation',
+        purpose: 'Mileage',
+        client_or_prospect: clientOrProspect || null,
+      });
+      return; // Exit after saving mileage
+    }
+
+    // Original manual entry logic
     const amount = parseFloat(totalAmount);
     if (transactionName && !isNaN(amount) && transactionDate && category) {
       onSave({
@@ -91,9 +135,11 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ onClose, onSave }) => {
         total_amount: amount,
         transaction_date: transactionDate,
         category: category,
+        client_or_prospect: clientOrProspect || null,
+        purpose: purpose || null,
       });
     } else {
-        alert("Please fill in all fields correctly.");
+        alert("Please fill in either the mileage details or the main transaction fields correctly.");
     }
   };
   
@@ -134,6 +180,33 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ onClose, onSave }) => {
             </button>
             <p className="text-xs text-slate-500 mt-2 text-center">Example: "Jeepney ride, twenty pesos, today, transportation"</p>
           </div>
+
+          <div className="my-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <h3 className="text-sm font-bold text-slate-500 mb-3 uppercase tracking-wider text-center">Log Mileage</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="startLocation" className="block text-xs font-medium text-slate-500 mb-1">Start Location</label>
+                  <input id="startLocation" type="text" value={startLocation} onChange={(e) => setStartLocation(e.target.value)} placeholder="e.g., Office" className="w-full px-2 py-1.5 text-sm text-slate-800 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                </div>
+                <div>
+                  <label htmlFor="endLocation" className="block text-xs font-medium text-slate-500 mb-1">End Location</label>
+                  <input id="endLocation" type="text" value={endLocation} onChange={(e) => setEndLocation(e.target.value)} placeholder="e.g., Client Site" className="w-full px-2 py-1.5 text-sm text-slate-800 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="distance" className="block text-xs font-medium text-slate-500 mb-1">Distance (km)</label>
+                  <input id="distance" type="number" step="0.1" value={distance} onChange={(e) => setDistance(e.target.value)} placeholder="e.g., 25.5" className="w-full px-2 py-1.5 text-sm text-slate-800 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                </div>
+                <div>
+                  <label htmlFor="rate" className="block text-xs font-medium text-slate-500 mb-1">Rate (₱/km)</label>
+                  <input id="rate" type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} className="w-full px-2 py-1.5 text-sm text-slate-800 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center text-slate-400 text-sm">
             <div className="flex-grow border-t border-slate-200"></div>
             <span className="flex-shrink mx-4">OR</span>
@@ -146,7 +219,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ onClose, onSave }) => {
             <input
               id="transactionName" type="text" value={transactionName} onChange={(e) => setTransactionName(e.target.value)}
               className="w-full px-3 py-2 text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              placeholder="e.g., Bus Fare" required
+              placeholder="e.g., Bus Fare"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -155,7 +228,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ onClose, onSave }) => {
                   <input
                       id="totalAmount" type="number" step="0.01" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)}
                       className="w-full px-3 py-2 text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      placeholder="e.g., 20.00" required
+                      placeholder="e.g., 20.00"
                   />
               </div>
               <div>
@@ -174,6 +247,26 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ onClose, onSave }) => {
             >
               {categories.map((cat) => (<option key={cat} value={cat}>{cat}</option>))}
             </select>
+          </div>
+           <div>
+            <label htmlFor="clientOrProspect" className="block text-sm font-medium text-slate-600 mb-1">
+              Client/Prospect
+            </label>
+            <input
+              id="clientOrProspect" type="text" value={clientOrProspect} onChange={(e) => setClientOrProspect(e.target.value)}
+              className="w-full px-3 py-2 text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              placeholder="e.g., John Doe"
+            />
+          </div>
+           <div>
+            <label htmlFor="purpose" className="block text-sm font-medium text-slate-600 mb-1">
+              Purpose
+            </label>
+            <input
+              id="purpose" type="text" value={purpose} onChange={(e) => setPurpose(e.target.value)}
+              className="w-full px-3 py-2 text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              placeholder="e.g., Client Coffee"
+            />
           </div>
           <button
             type="submit"

@@ -15,10 +15,10 @@ const AIAnalytics: React.FC<AIAnalyticsProps> = ({ receipts }) => {
     const [error, setError] = useState<string | null>(null);
 
     const examplePrompts = [
-        "How much did I spend on food this month?",
-        "What are my top 3 spending categories?",
-        "Show me my expenses from last week.",
-        "What was my most expensive purchase?",
+        "Are my claims ready for submission?",
+        "How much did I spend on gas and toll?",
+        "Show all expenses for client meetings.",
+        "Find any issues that might get my claims rejected.",
     ];
 
     const handleGetInsights = async () => {
@@ -43,13 +43,55 @@ const AIAnalytics: React.FC<AIAnalyticsProps> = ({ receipts }) => {
         setQuery(prompt);
     }
 
+    // New function to render the AI's markdown response as styled HTML
+    const renderAnalysis = (text: string) => {
+        return text.split('\n').map((line, i) => {
+            // Handle horizontal rule
+            if (line.trim() === '---') {
+                return <hr key={i} className="my-4 border-slate-300" />;
+            }
+
+            // Handle list items starting with '*'
+            if (line.trim().startsWith('* ')) {
+                const content = line.trim().substring(2);
+                // Split by bold tags to style them separately
+                const parts = content.split(/(\*\*.*?\*\*)/g).filter(part => part);
+                return (
+                    <p key={i} className="text-slate-600 mb-2 pl-4 relative">
+                        <span className="absolute left-0 top-1.5 w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
+                        {parts.map((part, index) => {
+                            if (part.startsWith('**') && part.endsWith('**')) {
+                                return <strong key={index} className="font-semibold text-slate-800">{part.slice(2, -2)}</strong>;
+                            }
+                            return part;
+                        })}
+                    </p>
+                );
+            }
+
+            // Handle headings/bold lines
+            if (line.trim().startsWith('**') && line.trim().endsWith('**')) {
+                const content = line.trim().slice(2, -2);
+                 return <h3 key={i} className="font-bold text-slate-800 text-md my-3">{content}</h3>
+            }
+
+            // Handle empty lines by returning null (they will be filtered out)
+            if (line.trim() === '') {
+                return null;
+            }
+
+            // Default paragraph
+            return <p key={i} className="text-slate-600 mb-2">{line}</p>;
+        }).filter(Boolean); // Filter out the nulls from empty lines
+    };
+
     return (
         <div className="p-6 bg-white rounded-2xl shadow-lg border border-slate-200 animate-fade-in-up">
             <div className="flex items-center gap-3">
                  <SparklesIcon className="w-8 h-8 text-indigo-500" />
                  <div>
                     <h2 className="text-xl font-bold text-slate-800">AI Financial Assistant</h2>
-                    <p className="text-sm text-slate-500 mt-1">Ask questions about your spending.</p>
+                    <p className="text-sm text-slate-500 mt-1">Ask "Kuya Claims" about your spending.</p>
                 </div>
             </div>
             
@@ -93,9 +135,9 @@ const AIAnalytics: React.FC<AIAnalyticsProps> = ({ receipts }) => {
                     {error && <p className="text-red-500 text-sm mt-4 text-center">{error}</p>}
 
                     {analysis && !isLoading && (
-                        <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                            <h3 className="font-semibold text-slate-700 mb-2">Analysis:</h3>
-                            <p className="text-slate-600 whitespace-pre-wrap">{analysis}</p>
+                        <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                            <h3 className="font-semibold text-slate-700 mb-2">Kuya Claims says:</h3>
+                            <div>{renderAnalysis(analysis)}</div>
                         </div>
                     )}
                 </div>

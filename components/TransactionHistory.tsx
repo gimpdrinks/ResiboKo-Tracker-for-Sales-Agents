@@ -1,9 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { SavedReceiptData } from '../types';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { TrashIcon } from './icons/TrashIcon';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
 import { SyncIcon } from './icons/SyncIcon';
+import { FileTextIcon } from './icons/FileTextIcon';
 import Spinner from './Spinner';
 
 interface TransactionHistoryProps {
@@ -113,22 +116,15 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ receipts, onDel
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzoHCui3GWkDkfTzpjhoCp9kIeCvCyzrKKweEtuIAm9cVLmrYO0SiZaqg0a3GI5hRApIw/exec';
 
     try {
-        // We send the receipts data in the body of the POST request.
-        // The Apps Script is set up to receive this data.
         await fetch(APPS_SCRIPT_URL, {
             method: 'POST',
-            // mode: 'no-cors' is often necessary for simple browser-to-Apps-Script calls
-            // to avoid CORS errors. The downside is we can't read the response body.
             mode: 'no-cors',
             headers: {
                 'Content-Type': 'application/json',
             },
-            // The body has to be a string, so we stringify our receipts array.
-            // The Apps Script expects an object with a 'receipts' key.
             body: JSON.stringify({ receipts: receipts }),
         });
 
-        // Since we can't read the response with 'no-cors', we'll assume success if the fetch doesn't throw an error.
         setSyncStatus('synced');
 
     } catch (error) {
@@ -136,7 +132,6 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ receipts, onDel
         alert('Syncing failed. Check the browser console for more details.');
         setSyncStatus('idle'); // Reset on error
     } finally {
-        // Reset the button state after a couple of seconds so the user can see the success message.
         setTimeout(() => setSyncStatus('idle'), 2500);
     }
   };
@@ -158,12 +153,14 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ receipts, onDel
       let rows: string[][] = [];
 
       if (activeFilter === 'All') {
-          csvContent += "Date,Transaction,Amount,Category\n";
+          csvContent += "Date,Transaction,Amount,Category,Client/Prospect,Purpose\n";
           rows = (filteredData as SavedReceiptData[]).map(r => [
               r.transaction_date || '',
               `"${r.transaction_name?.replace(/"/g, '""') || ''}"`,
               r.total_amount?.toString() || '0',
-              r.category || 'Uncategorized'
+              r.category || 'Uncategorized',
+              `"${r.client_or_prospect?.replace(/"/g, '""') || ''}"`,
+              `"${r.purpose?.replace(/"/g, '""') || ''}"`
           ]);
       } else {
           csvContent += `Category,Total Amount for ${periodTitle}\n`;
@@ -181,7 +178,60 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ receipts, onDel
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-  }
+  };
+
+  const handleGeneratePdf = async () => {
+    if (activeFilter !== 'All' || !Array.isArray(filteredData)) {
+      alert("PDF generation is only available for the 'All' transactions view.");
+      return;
+    }
+    
+    const doc = new jsPDF();
+    const data = filteredData as SavedReceiptData[];
+
+    doc.setFontSize(18);
+    doc.text('Liquidation Report', 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(periodTitle, 14, 30);
+    
+    const head = [['Date', 'Transaction', 'Client/Prospect', 'Purpose', 'Category', 'Amount']];
+    // FIX: Explicitly type `body` as `any[]` to allow jspdf-autotable cell styling objects.
+    const body: any[] = data.map(r => [
+        r.transaction_date || 'N/A',
+        r.transaction_name || 'N/A',
+        r.client_or_prospect || 'N/A',
+        r.purpose || 'N/A',
+        r.category || 'N/A',
+        formatCurrency(r.total_amount || 0)
+    ]);
+    
+    const totalAmount = data.reduce((sum, r) => sum + (r.total_amount || 0), 0);
+    body.push(['', '', '', '', { content: 'TOTAL', styles: { fontStyle: 'bold' } }, { content: formatCurrency(totalAmount), styles: { fontStyle: 'bold' } }]);
+    
+    (doc as any).autoTable({
+        head: head,
+        body: body,
+        startY: 35,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        footStyles: { fontStyle: 'bold' },
+        didDrawCell: (data: any) => {
+            // Highlight rows with missing purpose (optional styling)
+            if (data.section === 'body' && data.column.index === 3 && data.cell.raw === 'N/A') {
+                doc.setFillColor(255, 235, 238); // Light red
+            }
+        }
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY;
+    doc.setFontSize(10);
+    doc.text('Submitted by:', 14, finalY + 20);
+    doc.text('_________________________', 14, finalY + 30);
+    doc.text('Signature over Printed Name', 14, finalY + 35);
+    
+    doc.save(`ResiboKo_Liquidation_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
 
   const filters: FilterType[] = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly', 'All'];
 
@@ -202,10 +252,16 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ receipts, onDel
                     {syncStatus === 'syncing' ? <Spinner className="w-4 h-4" /> : <SyncIcon className="w-4 h-4" />}
                     {syncButtonText[syncStatus]}
                 </button>
-                <button onClick={handleDownloadCsv} className="flex-shrink-0 w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-indigo-600 bg-indigo-100 hover:bg-indigo-200 rounded-lg font-semibold transition-colors shadow-sm">
-                    <DownloadIcon className="w-4 h-4" />
-                    Download CSV
-                </button>
+                <div className="flex gap-2 w-full">
+                    <button onClick={handleDownloadCsv} className="flex-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-indigo-600 bg-indigo-100 hover:bg-indigo-200 rounded-lg font-semibold transition-colors shadow-sm">
+                        <DownloadIcon className="w-4 h-4" />
+                        CSV
+                    </button>
+                    <button onClick={handleGeneratePdf} disabled={activeFilter !== 'All'} className="flex-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-red-600 bg-red-100 hover:bg-red-200 rounded-lg font-semibold transition-colors shadow-sm disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed">
+                        <FileTextIcon className="w-4 h-4" />
+                        PDF
+                    </button>
+                </div>
             </div>
         )}
       </div>
@@ -237,7 +293,14 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ receipts, onDel
                 (filteredData as SavedReceiptData[]).map(receipt => (
                    <li key={receipt.id} className="flex items-center justify-between py-4">
                     <div className="flex-grow">
-                      <p className="font-semibold text-slate-800">{receipt.transaction_name}</p>
+                      <div className="flex items-center gap-2">
+                          <p className="font-semibold text-slate-800">{receipt.transaction_name}</p>
+                          {!receipt.purpose && (
+                            <span className="text-xs font-semibold px-2 py-0.5 bg-red-100 text-red-700 rounded-full">
+                              Missing Purpose
+                            </span>
+                          )}
+                      </div>
                       <p className="text-sm text-slate-500">{receipt.transaction_date}</p>
                     </div>
                     <div className="flex items-center gap-4">

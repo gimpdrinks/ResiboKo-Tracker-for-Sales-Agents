@@ -11,12 +11,45 @@ import Spinner from './components/Spinner';
 import { CameraIcon } from './components/icons/CameraIcon';
 import { PlusCircleIcon } from './components/icons/PlusCircleIcon';
 
+const agentPresets = [
+    {
+        label: 'Parking (₱50)',
+        data: {
+            transaction_name: 'Parking',
+            total_amount: 50,
+            category: 'Transportation' as const,
+            purpose: 'Parking',
+        },
+        colorClass: 'bg-blue-100 text-blue-800 hover:bg-blue-200',
+    },
+    {
+        label: 'Toll (₱100)',
+        data: {
+            transaction_name: 'Toll',
+            total_amount: 100,
+            category: 'Transportation' as const,
+            purpose: 'Toll',
+        },
+        colorClass: 'bg-blue-100 text-blue-800 hover:bg-blue-200',
+    },
+    {
+        label: 'Client Coffee (₱120)',
+        data: {
+            transaction_name: 'Client Coffee',
+            total_amount: 120,
+            category: 'Food & Drink' as const,
+            purpose: 'Client Coffee',
+        },
+        colorClass: 'bg-red-100 text-red-800 hover:bg-red-200',
+    },
+];
+
 const App: React.FC = () => {
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
     const [savedReceipts, setSavedReceipts] = useState<SavedReceiptData[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const [showManualEntry, setShowManualEntry] = useState<boolean>(false);
+    const [manualEntryData, setManualEntryData] = useState<Partial<ReceiptData> | null>(null);
     const [showCamera, setShowCamera] = useState<boolean>(false);
 
     // Load receipts from local storage on initial render
@@ -76,8 +109,20 @@ const App: React.FC = () => {
         };
         setSavedReceipts(prev => [newReceipt, ...prev].sort((a, b) => new Date(b.transaction_date!).getTime() - new Date(a.transaction_date!).getTime()));
         setReceiptData(null);
-        setShowManualEntry(false);
     }, []);
+    
+    const handleSaveFromManual = (data: ReceiptData) => {
+        handleSaveReceipt(data);
+        setManualEntryData(null); // Close modal on save
+    };
+
+    const handlePresetClick = (presetData: Omit<ReceiptData, 'transaction_date' | 'client_or_prospect'>) => {
+        const initialData: Partial<ReceiptData> = {
+            ...presetData,
+            transaction_date: new Date().toISOString().slice(0, 10),
+        };
+        setManualEntryData(initialData);
+    };
     
     const handleDiscard = () => {
         setReceiptData(null);
@@ -94,7 +139,7 @@ const App: React.FC = () => {
                 <div className="max-w-4xl mx-auto py-4 px-4 sm:px-6 lg:px-8 text-center">
                    <img src="https://res.cloudinary.com/dbylka4xx/image/upload/v1751883360/AiForPinoys_Logo_ttg2id.png" alt="ResiboKo Logo" className="h-16 w-auto mx-auto mb-2"/>
                    <h1 className="text-3xl font-bold font-poppins text-slate-800">ResiboKo</h1>
-                   <p className="mt-1 text-slate-600">Master your cash flow, one receipt at a time.</p>
+                   <p className="mt-1 text-slate-600">Liquidation in 15 Minutes. Every time.</p>
                 </div>
             </header>
 
@@ -102,20 +147,35 @@ const App: React.FC = () => {
                  <div className="p-6 bg-white rounded-2xl shadow-lg border border-slate-200">
                     {!receiptData && !isLoading && (
                          <>
-                            <h2 className="text-xl font-bold text-slate-800 mb-1 text-center">Upload a Receipt</h2>
-                            <p className="text-slate-500 mb-6 text-center text-sm">Extract transaction data using AI.</p>
-                            <ImageUploader onImageSelect={handleImageSelect} />
+                             <div className="mb-6">
+                                <h3 className="text-center text-sm font-bold text-slate-500 mb-3 uppercase tracking-wider">Sales Rep Presets</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {agentPresets.map(preset => (
+                                        <button
+                                            key={preset.label}
+                                            onClick={() => handlePresetClick(preset.data)}
+                                            className={`w-full text-center px-3 py-3 text-sm font-semibold rounded-lg transition-colors shadow-sm ${preset.colorClass}`}
+                                        >
+                                            {preset.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <div className="my-4 flex items-center text-slate-400 text-sm">
                                 <div className="flex-grow border-t border-slate-200"></div>
                                 <span className="flex-shrink mx-4">OR</span>
                                 <div className="flex-grow border-t border-slate-200"></div>
                             </div>
-                            <div className="space-y-3">
+                            <h2 className="text-xl font-bold text-slate-800 mb-1 text-center">Upload a Receipt</h2>
+                            <p className="text-slate-500 mb-6 text-center text-sm">Extract transaction data using AI.</p>
+                            <ImageUploader onImageSelect={handleImageSelect} />
+                           
+                            <div className="space-y-3 mt-6">
                                 <button onClick={() => setShowCamera(true)} className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-white bg-slate-700 hover:bg-slate-800 rounded-lg font-semibold transition-colors shadow-sm">
                                     <CameraIcon className="w-5 h-5" />
                                     Use Camera
                                 </button>
-                                 <button onClick={() => setShowManualEntry(true)} className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-white bg-slate-700 hover:bg-slate-800 rounded-lg font-semibold transition-colors shadow-sm">
+                                 <button onClick={() => setManualEntryData({ transaction_date: new Date().toISOString().slice(0, 10) })} className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-white bg-slate-700 hover:bg-slate-800 rounded-lg font-semibold transition-colors shadow-sm">
                                     <PlusCircleIcon className="w-5 h-5" />
                                     Manual / Voice Entry
                                 </button>
@@ -155,10 +215,11 @@ const App: React.FC = () => {
                 <AIAnalytics receipts={savedReceipts} />
             </main>
             
-            {showManualEntry && (
+            {manualEntryData && (
                 <ManualEntry 
-                    onClose={() => setShowManualEntry(false)}
-                    onSave={handleSaveReceipt}
+                    initialData={manualEntryData}
+                    onClose={() => setManualEntryData(null)}
+                    onSave={handleSaveFromManual}
                 />
             )}
             

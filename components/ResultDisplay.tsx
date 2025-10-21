@@ -108,6 +108,34 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onSave, onDiscard }
             ))}
           </select>
         </div>
+        <div>
+          <label htmlFor="client_or_prospect" className="block text-sm font-medium text-slate-600 mb-1">
+            Client/Prospect
+          </label>
+          <input
+            id="client_or_prospect"
+            name="client_or_prospect"
+            type="text"
+            value={formData.client_or_prospect || ''}
+            onChange={handleChange}
+            className="w-full px-3 py-2 text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            placeholder="e.g., John Doe"
+          />
+        </div>
+        <div>
+          <label htmlFor="purpose" className="block text-sm font-medium text-slate-600 mb-1">
+            Purpose
+          </label>
+          <input
+            id="purpose"
+            name="purpose"
+            type="text"
+            value={formData.purpose || ''}
+            onChange={handleChange}
+            className="w-full px-3 py-2 text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            placeholder="e.g., Client Coffee"
+          />
+        </div>
       </div>
       <div className="mt-6 flex flex-col sm:flex-row gap-4">
         <button
